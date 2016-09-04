@@ -1,0 +1,1 @@
+Data struct is from this website: http://www.psdevwiki.com/ps3/PARAM.SFO
