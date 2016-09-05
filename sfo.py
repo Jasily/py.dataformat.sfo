@@ -6,7 +6,7 @@
 # 
 # ----------
 
-import os
+import io
 
 class FormatError(Exception):
     pass
@@ -134,11 +134,14 @@ class Data:
         self._index_table_entry.fix_data(self)
         raise NotImplementedError
 
+    def __seek(self, reader, offset):
+        pos = reader.tell()
+        if pos != offset:
+            reader.seek(offset)
+
     def key_from_reader(self, reader, header):
         offset = header.key_table_start + self._index_table_entry.key_offset
-        if reader.tell() != offset:
-            print('%s -> %s' % (reader.tell(), offset))
-            reader.seek(offset)
+        self.__seek(reader, offset)
         buffer = b''
         while True:
             b = reader.read(1)
@@ -149,9 +152,7 @@ class Data:
 
     def value_from_reader(self, reader, header):
         offset = header.data_table_start + self._index_table_entry.data_offset
-        if reader.tell() != offset:
-            print('%s -> %s' % (reader.tell(), offset))
-            reader.seek(offset)
+        self.__seek(reader, offset)
         buffer = reader.read(self._index_table_entry.data_max_len)
         if self._index_table_entry.data_fmt == IndexTableEntry.FORMAT_UTF8:
             i = buffer.find(b'\x00')
@@ -202,7 +203,6 @@ class SfoFile:
         datas = [Data() for _ in range(0, header.tables_entries)]
         for d in datas:
             d.index_table_entry.from_reader(reader)
-            print(d.index_table_entry.__dict__)
         for d in datas:
             d.key_from_reader(reader, header)
         for d in datas:
@@ -210,10 +210,13 @@ class SfoFile:
         sfo = SfoFile(header, datas)
         return sfo
 
+    @staticmethod
+    def from_bytes(buffer):
+        return SfoFile.from_reader(io.BytesIO(buffer))
+
 def test(path):
     with open(path, mode='rb') as reader:
         sfo = SfoFile.from_reader(reader)
-        print(sfo._header.__dict__)
         for k in sfo._data:
             v = sfo._data[k]
             print('%s: "%s"' % (v._key, v._value))
