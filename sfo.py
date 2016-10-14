@@ -8,6 +8,13 @@
 
 import io
 
+__all__ = [
+    'FormatError',
+    'SfoFile',
+    'PSVGameSfo',
+    'PSPGameSfo',
+]
+
 class FormatError(Exception):
     pass
 
@@ -173,6 +180,9 @@ class SfoFile:
         for d in data:
             self._data[d.key] = d
 
+    def __contains__(self, key):
+        return key in self._data
+
     def __getitem__(self, key):
         return self._data[key].value
 
@@ -190,6 +200,10 @@ class SfoFile:
 
     def values(self):
         return self._data.values()
+
+    def get_or_None(self, key):
+        r = self._data.get(key, None)
+        return None if r == None else r.value
 
     def _fix_data(self):
         for v in self.values():
@@ -213,6 +227,70 @@ class SfoFile:
     @staticmethod
     def from_bytes(buffer):
         return SfoFile.from_reader(io.BytesIO(buffer))
+
+class _Loader:
+    def __init__(self, sfo: SfoFile, key):
+        self._sfo = sfo
+        self._key = key
+        self._value = None
+        self._is_loaded = False
+
+    def refresh(self):
+        self._is_loaded = False
+
+    @property
+    def value(self):
+        if not self._is_loaded:
+            self._value = self._sfo.get_or_None(self._key)
+            self._is_loaded = True
+        return self._value
+
+
+class SfoInfoWrapper:
+    def __init__(self, sfo):
+        self._sfo = sfo
+        self._cache = {}
+
+    @classmethod
+    def from_bytes(cls, buffer):
+        return cls(SfoFile.from_reader(io.BytesIO(buffer)))
+
+    def refresh(self):
+        for value in self._cache.values():
+            value.refresh()
+
+    def _get_value(self, key):
+        loader = self._cache.get(key)
+        if loader == None:
+            loader = _Loader(self._sfo, key)
+            self._cache[key] = loader
+        return loader.value
+
+    @property
+    def app_ver(self):      return self._get_value('APP_VER')
+
+    @property
+    def category(self):     return self._get_value('CATEGORY')
+
+    @property
+    def title(self):        return self._get_value('TITLE')
+
+
+class PSVGameSfo(SfoInfoWrapper):
+    @property
+    def content_id(self):   return self._get_value('CONTENT_ID')
+
+    @property
+    def title_id(self):     return self._get_value('TITLE_ID')
+
+
+class PSPGameSfo(SfoInfoWrapper):
+    @property
+    def disc_id(self):      return self._get_value('DISC_ID')
+
+    @property
+    def category(self):     return self._get_value('CATEGORY')
+
 
 def test(path):
     with open(path, mode='rb') as reader:
